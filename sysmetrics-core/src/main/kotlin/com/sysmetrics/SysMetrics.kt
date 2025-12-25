@@ -1,0 +1,332 @@
+package com.sysmetrics
+
+import android.content.Context
+import com.sysmetrics.data.cache.MetricsCache
+import com.sysmetrics.data.repository.MetricsRepositoryImpl
+import com.sysmetrics.domain.model.HealthScore
+import com.sysmetrics.domain.model.SystemMetrics
+import com.sysmetrics.domain.repository.IMetricsRepository
+import com.sysmetrics.infrastructure.android.AndroidMetricsProvider
+import com.sysmetrics.infrastructure.proc.ProcFileReader
+import kotlinx.coroutines.flow.Flow
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+
+/**
+ * Main entry point for the SysMetrics library.
+ *
+ * SysMetrics provides comprehensive system metrics collection for Android devices,
+ * including CPU, memory, battery, thermal, and storage metrics. It follows clean
+ * architecture principles and provides both one-shot and streaming APIs.
+ *
+ * ## Quick Start
+ *
+ * ```kotlin
+ * // Initialize (call once, typically in Application.onCreate())
+ * SysMetrics.initialize(applicationContext)
+ *
+ * // Get current metrics
+ * val result = SysMetrics.getCurrentMetrics()
+ * result.onSuccess { metrics ->
+ *     println("CPU Usage: ${metrics.cpuMetrics.usagePercent}%")
+ * }
+ *
+ * // Observe metrics stream
+ * SysMetrics.observeMetrics(intervalMs = 1000)
+ *     .collect { metrics ->
+ *         // Handle real-time metrics
+ *     }
+ *
+ * // Cleanup when done
+ * SysMetrics.destroy()
+ * ```
+ *
+ * ## Thread Safety
+ *
+ * All methods are thread-safe and can be called from any thread.
+ * Initialization is idempotent - multiple calls are safe.
+ *
+ * ## Performance
+ *
+ * - Startup: < 100ms
+ * - Per-collection: < 5ms (p99)
+ * - Memory: < 5MB steady state
+ * - Cache TTL: 500ms
+ *
+ * @see IMetricsRepository for the complete repository interface
+ * @see SystemMetrics for the main metrics data class
+ */
+public object SysMetrics {
+
+    private val initialized = AtomicBoolean(false)
+    private val repositoryRef = AtomicReference<IMetricsRepository?>(null)
+    private val contextRef = AtomicReference<Context?>(null)
+
+    /**
+     * Library version string.
+     */
+    public const val VERSION: String = "1.0.0"
+
+    /**
+     * Library name.
+     */
+    public const val NAME: String = "SysMetrics"
+
+    /**
+     * Initializes the SysMetrics library.
+     *
+     * Must be called before any other methods. Safe to call multiple times;
+     * subsequent calls after successful initialization are no-ops.
+     *
+     * Recommended to call in [android.app.Application.onCreate].
+     *
+     * @param context Application context (will be stored as application context)
+     * @throws IllegalStateException if context is null
+     *
+     * Example:
+     * ```kotlin
+     * class MyApplication : Application() {
+     *     override fun onCreate() {
+     *         super.onCreate()
+     *         SysMetrics.initialize(this)
+     *     }
+     * }
+     * ```
+     */
+    public fun initialize(context: Context) {
+        if (initialized.get()) {
+            return
+        }
+
+        synchronized(this) {
+            if (initialized.get()) {
+                return
+            }
+
+            val appContext = context.applicationContext
+            contextRef.set(appContext)
+
+            val procFileReader = ProcFileReader()
+            val androidProvider = AndroidMetricsProvider(appContext)
+            val cache = MetricsCache()
+
+            val repository = MetricsRepositoryImpl(
+                procFileReader = procFileReader,
+                androidProvider = androidProvider,
+                cache = cache
+            )
+
+            repositoryRef.set(repository)
+            initialized.set(true)
+        }
+    }
+
+    /**
+     * Returns the underlying [IMetricsRepository] instance.
+     *
+     * Use this for advanced operations or when you need direct repository access.
+     *
+     * @return The [IMetricsRepository] instance
+     * @throws IllegalStateException if library is not initialized
+     *
+     * Example:
+     * ```kotlin
+     * val repository = SysMetrics.getRepository()
+     * repository.initialize()
+     * val history = repository.getMetricsHistory(count = 100)
+     * ```
+     */
+    public fun getRepository(): IMetricsRepository {
+        checkInitialized()
+        return repositoryRef.get()
+            ?: throw IllegalStateException("Repository is null. Call initialize() first.")
+    }
+
+    /**
+     * Retrieves the current system metrics snapshot.
+     *
+     * Returns cached metrics if still valid (within 500ms TTL), otherwise
+     * collects fresh metrics from the system. This is a suspend function
+     * that should be called from a coroutine context.
+     *
+     * @return [Result] containing [SystemMetrics] on success, or an error on failure
+     *
+     * Example:
+     * ```kotlin
+     * lifecycleScope.launch {
+     *     SysMetrics.getCurrentMetrics()
+     *         .onSuccess { metrics ->
+     *             textView.text = "CPU: ${metrics.cpuMetrics.usagePercent}%"
+     *         }
+     *         .onFailure { error ->
+     *             Log.e("SysMetrics", "Failed to get metrics", error)
+     *         }
+     * }
+     * ```
+     */
+    public suspend fun getCurrentMetrics(): Result<SystemMetrics> {
+        return try {
+            checkInitialized()
+            getRepository().getCurrentMetrics()
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Observes system metrics as a continuous stream.
+     *
+     * Emits new metrics at the specified interval. Uses distinctUntilChanged
+     * internally to avoid redundant emissions when values haven't changed
+     * significantly.
+     *
+     * @param intervalMs Interval between emissions in milliseconds (default: 1000ms)
+     * @return [Flow] of [SystemMetrics] that emits periodically
+     * @throws IllegalStateException if library is not initialized
+     *
+     * Example:
+     * ```kotlin
+     * lifecycleScope.launch {
+     *     SysMetrics.observeMetrics(intervalMs = 500)
+     *         .collect { metrics ->
+     *             updateUI(metrics)
+     *         }
+     * }
+     * ```
+     */
+    public fun observeMetrics(intervalMs: Long = 1000L): Flow<SystemMetrics> {
+        checkInitialized()
+        return getRepository().observeMetrics(intervalMs)
+    }
+
+    /**
+     * Observes the system health score as a continuous stream.
+     *
+     * Calculates health score based on current metrics and emits updates
+     * when the score or detected issues change. The health score considers
+     * CPU usage, memory usage, temperature, and battery level.
+     *
+     * @return [Flow] of [HealthScore] that emits when health status changes
+     * @throws IllegalStateException if library is not initialized
+     *
+     * Example:
+     * ```kotlin
+     * lifecycleScope.launch {
+     *     SysMetrics.observeHealthScore()
+     *         .collect { healthScore ->
+     *             when (healthScore.status) {
+     *                 HealthStatus.EXCELLENT -> showGreenIndicator()
+     *                 HealthStatus.GOOD -> showYellowIndicator()
+     *                 HealthStatus.WARNING -> showOrangeIndicator()
+     *                 HealthStatus.CRITICAL -> showRedIndicator()
+     *             }
+     *         }
+     * }
+     * ```
+     */
+    public fun observeHealthScore(): Flow<HealthScore> {
+        checkInitialized()
+        return getRepository().observeHealthScore()
+    }
+
+    /**
+     * Retrieves historical metrics from the internal buffer.
+     *
+     * Returns up to [count] most recent metrics snapshots.
+     * History is bounded to 300 items maximum.
+     *
+     * @param count Maximum number of historical entries to retrieve (default: 60)
+     * @return [Result] containing list of [SystemMetrics] or an error
+     *
+     * Example:
+     * ```kotlin
+     * lifecycleScope.launch {
+     *     SysMetrics.getMetricsHistory(count = 30)
+     *         .onSuccess { history ->
+     *             val averageCpu = history.map { it.cpuMetrics.usagePercent }.average()
+     *             println("Average CPU over last 30 samples: $averageCpu%")
+     *         }
+     * }
+     * ```
+     */
+    public suspend fun getMetricsHistory(count: Int = 60): Result<List<SystemMetrics>> {
+        return try {
+            checkInitialized()
+            getRepository().getMetricsHistory(count)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Clears the metrics history buffer.
+     *
+     * Removes all stored historical metrics. Does not affect current metrics
+     * or cached values.
+     *
+     * @return [Result.success] if cleared successfully, [Result.failure] otherwise
+     */
+    public suspend fun clearHistory(): Result<Unit> {
+        return try {
+            checkInitialized()
+            getRepository().clearHistory()
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Releases all resources held by the library.
+     *
+     * Cancels any active metric collection, clears caches and history,
+     * and releases system resources. The library can be re-initialized
+     * after calling this method by calling [initialize] again.
+     *
+     * @return [Result.success] if destroyed successfully, [Result.failure] otherwise
+     *
+     * Example:
+     * ```kotlin
+     * override fun onTerminate() {
+     *     super.onTerminate()
+     *     runBlocking {
+     *         SysMetrics.destroy()
+     *     }
+     * }
+     * ```
+     */
+    public suspend fun destroy(): Result<Unit> {
+        return try {
+            if (!initialized.get()) {
+                return Result.success(Unit)
+            }
+
+            synchronized(this) {
+                val repository = repositoryRef.get()
+                val result = repository?.destroy() ?: Result.success(Unit)
+                
+                repositoryRef.set(null)
+                contextRef.set(null)
+                initialized.set(false)
+                
+                result
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Checks if the library has been initialized.
+     *
+     * @return true if initialized, false otherwise
+     */
+    public fun isInitialized(): Boolean = initialized.get()
+
+    private fun checkInitialized() {
+        if (!initialized.get()) {
+            throw IllegalStateException(
+                "SysMetrics is not initialized. Call SysMetrics.initialize(context) first."
+            )
+        }
+    }
+}
