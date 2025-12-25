@@ -1,7 +1,9 @@
 package com.sysmetrics.domain.repository
 
+import com.sysmetrics.domain.model.AggregatedMetrics
 import com.sysmetrics.domain.model.HealthScore
 import com.sysmetrics.domain.model.SystemMetrics
+import com.sysmetrics.domain.model.TimeWindow
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -89,4 +91,61 @@ public interface IMetricsRepository {
      * @return [Result.success] if destroyed successfully, [Result.failure] otherwise
      */
     public suspend fun destroy(): Result<Unit>
+
+    // ==================== Aggregation API ====================
+
+    /**
+     * Retrieves aggregated metrics for the last complete time window.
+     *
+     * For example, if called at 14:32 with [TimeWindow.FIVE_MINUTES],
+     * returns metrics aggregated from 14:25 to 14:30 (the last complete 5-minute window).
+     *
+     * The aggregation includes:
+     * - Average values for CPU, memory, battery usage
+     * - Min/max values for CPU and memory
+     * - Last recorded temperature
+     * - Average health score
+     * - Total network bytes transferred
+     *
+     * @param timeWindow The time window for aggregation
+     * @return [Result.success] containing [AggregatedMetrics] or [Result.failure] with exception
+     *
+     * Example:
+     * ```kotlin
+     * repository.getAggregatedMetrics(TimeWindow.FIVE_MINUTES)
+     *     .onSuccess { metrics ->
+     *         println("Avg CPU: ${metrics.cpuPercentAverage}%")
+     *         println("Samples: ${metrics.sampleCount}")
+     *     }
+     * ```
+     */
+    public suspend fun getAggregatedMetrics(timeWindow: TimeWindow): Result<AggregatedMetrics>
+
+    /**
+     * Retrieves historical aggregated metrics for multiple time windows.
+     *
+     * Returns a list of [AggregatedMetrics] for the last [count] complete time windows.
+     * Useful for building charts and trend analysis.
+     *
+     * For example, with [TimeWindow.FIVE_MINUTES] and count=12, returns
+     * aggregated metrics for the last hour (12 x 5 minutes).
+     *
+     * @param timeWindow The time window size for each aggregation
+     * @param count Number of time windows to retrieve (default: 12)
+     * @return [Result.success] containing list of [AggregatedMetrics] (oldest first) or [Result.failure]
+     *
+     * Example:
+     * ```kotlin
+     * // Get hourly chart data (12 five-minute intervals)
+     * repository.getAggregatedHistory(TimeWindow.FIVE_MINUTES, count = 12)
+     *     .onSuccess { history ->
+     *         val cpuTrend = history.map { it.cpuPercentAverage }
+     *         plotChart(cpuTrend)
+     *     }
+     * ```
+     */
+    public suspend fun getAggregatedHistory(
+        timeWindow: TimeWindow,
+        count: Int = 12
+    ): Result<List<AggregatedMetrics>>
 }

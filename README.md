@@ -106,6 +106,29 @@ override fun onTerminate() {
 }
 ```
 
+### Aggregated Metrics
+
+```kotlin
+// Get aggregated metrics for the last 5-minute window
+lifecycleScope.launch {
+    SysMetrics.getAggregatedMetrics(TimeWindow.FIVE_MINUTES)
+        .onSuccess { metrics ->
+            println("Avg CPU: ${metrics.cpuPercentAverage}%")
+            println("Avg Memory: ${metrics.memoryPercentAverage}%")
+            println("Samples: ${metrics.sampleCount}")
+        }
+}
+
+// Get hourly chart data (12 five-minute intervals)
+lifecycleScope.launch {
+    SysMetrics.getAggregatedHistory(TimeWindow.FIVE_MINUTES, count = 12)
+        .onSuccess { history ->
+            val cpuTrend = history.map { it.cpuPercentAverage }
+            plotChart(cpuTrend)
+        }
+}
+```
+
 ## API Reference
 
 ### SysMetrics Singleton
@@ -117,6 +140,8 @@ override fun onTerminate() {
 | `observeMetrics(intervalMs)` | Stream metrics at specified interval |
 | `observeHealthScore()` | Stream health score updates |
 | `getMetricsHistory(count)` | Get historical metrics |
+| `getAggregatedMetrics(timeWindow)` | Get aggregated metrics for a time window |
+| `getAggregatedHistory(timeWindow, count)` | Get historical aggregated metrics |
 | `clearHistory()` | Clear metrics history |
 | `destroy()` | Release all resources |
 
@@ -128,7 +153,10 @@ override fun onTerminate() {
 - **BatteryMetrics** - Level, temperature, status, health
 - **ThermalMetrics** - CPU/battery temperature, throttling
 - **StorageMetrics** - Storage capacity and usage
+- **NetworkMetrics** - Network traffic and connection info
 - **HealthScore** - Overall system health assessment
+- **AggregatedMetrics** - Aggregated statistics over time window
+- **TimeWindow** - Time window for aggregation (1min, 5min, 30min, 1hour)
 
 ### Enums
 

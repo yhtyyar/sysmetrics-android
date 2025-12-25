@@ -1,9 +1,13 @@
 package com.sysmetrics.data.repository
 
+import com.sysmetrics.data.aggregation.MetricsAggregationStrategy
+import com.sysmetrics.data.aggregation.SimpleAggregationStrategy
 import com.sysmetrics.data.cache.MetricsCache
 import com.sysmetrics.data.mapper.MetricsMapper
+import com.sysmetrics.domain.model.AggregatedMetrics
 import com.sysmetrics.domain.model.HealthScore
 import com.sysmetrics.domain.model.SystemMetrics
+import com.sysmetrics.domain.model.TimeWindow
 import com.sysmetrics.domain.repository.IMetricsRepository
 import com.sysmetrics.infrastructure.android.AndroidMetricsProvider
 import com.sysmetrics.infrastructure.android.NetworkMetricsProvider
@@ -36,7 +40,8 @@ public class MetricsRepositoryImpl(
     private val procFileReader: ProcFileReader,
     private val androidProvider: AndroidMetricsProvider,
     private val networkProvider: NetworkMetricsProvider,
-    private val cache: MetricsCache
+    private val cache: MetricsCache,
+    private val aggregationStrategy: MetricsAggregationStrategy = SimpleAggregationStrategy()
 ) : IMetricsRepository {
 
     private val mutex = Mutex()
@@ -182,6 +187,55 @@ public class MetricsRepositoryImpl(
         }
     }
 
+    // ==================== Aggregation API Implementation ====================
+
+    override suspend fun getAggregatedMetrics(timeWindow: TimeWindow): Result<AggregatedMetrics> =
+        withContext(Dispatchers.IO) {
+            safeCall("getAggregatedMetrics") {
+                val metrics = mutex.withLock { history.toList() }
+                aggregationStrategy.aggregate(metrics, timeWindow)
+            }
+        }
+
+    override suspend fun getAggregatedHistory(
+        timeWindow: TimeWindow,
+        count: Int
+    ): Result<List<AggregatedMetrics>> = withContext(Dispatchers.IO) {
+        safeCall("getAggregatedHistory") {
+            val metrics = mutex.withLock { history.toList() }
+            val nowMillis = System.currentTimeMillis()
+            val strategy = aggregationStrategy as? SimpleAggregationStrategy
+                ?: SimpleAggregationStrategy()
+            
+            val windowDuration = timeWindow.durationMillis()
+            val results = mutableListOf<AggregatedMetrics>()
+            
+            // Generate aggregations for 'count' previous complete windows
+            for (i in count downTo 1) {
+                val windowEnd = strategy.calculateWindowStart(nowMillis, timeWindow) - 
+                    ((i - 1) * windowDuration)
+                val windowStart = windowEnd - windowDuration
+                
+                results.add(
+                    strategy.aggregateForWindow(metrics, timeWindow, windowStart, windowEnd)
+                )
+            }
+            
+            results
+        }
+    }
+
+    /**
+     * Wrapper for safe execution with error handling.
+     */
+    private suspend fun <T> safeCall(operation: String, block: suspend () -> T): Result<T> {
+        return try {
+            Result.success(block())
+        } catch (e: Exception) {
+            Result.failure(MetricsAggregationException("Failed $operation: ${e.message}", e))
+        }
+    }
+
     public companion object {
         /** Maximum number of metrics entries to keep in history */
         public const val MAX_HISTORY_SIZE: Int = 300
@@ -193,3 +247,11 @@ public class MetricsRepositoryImpl(
         public const val HEALTH_CHECK_INTERVAL_MS: Long = 1000L
     }
 }
+
+/**
+ * Exception thrown when metrics aggregation fails.
+ */
+public class MetricsAggregationException(
+    message: String,
+    cause: Throwable? = null
+) : Exception(message, cause)
