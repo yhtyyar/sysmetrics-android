@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
  * Represents a complete snapshot of all system metrics.
  *
  * This is the primary data class for collecting and analyzing system performance.
- * It aggregates CPU, memory, battery, thermal, and storage metrics along with
+ * It aggregates CPU, memory, battery, thermal, storage, and network metrics along with
  * timing information.
  *
  * @property cpuMetrics Current CPU metrics
@@ -14,6 +14,7 @@ import kotlinx.serialization.Serializable
  * @property batteryMetrics Current battery metrics
  * @property thermalMetrics Current thermal metrics
  * @property storageMetrics Current storage metrics
+ * @property networkMetrics Current network metrics
  * @property timestamp Unix timestamp in milliseconds when these metrics were collected
  * @property uptime System uptime in milliseconds
  */
@@ -24,6 +25,7 @@ public data class SystemMetrics(
     val batteryMetrics: BatteryMetrics,
     val thermalMetrics: ThermalMetrics,
     val storageMetrics: StorageMetrics,
+    val networkMetrics: NetworkMetrics,
     val timestamp: Long,
     val uptime: Long
 ) {
@@ -142,6 +144,7 @@ public data class SystemMetrics(
             batteryMetrics = BatteryMetrics.empty(),
             thermalMetrics = ThermalMetrics.empty(),
             storageMetrics = StorageMetrics.empty(),
+            networkMetrics = NetworkMetrics.empty(),
             timestamp = System.currentTimeMillis(),
             uptime = 0
         )

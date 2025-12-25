@@ -6,6 +6,7 @@ import com.sysmetrics.domain.model.HealthScore
 import com.sysmetrics.domain.model.SystemMetrics
 import com.sysmetrics.domain.repository.IMetricsRepository
 import com.sysmetrics.infrastructure.android.AndroidMetricsProvider
+import com.sysmetrics.infrastructure.android.NetworkMetricsProvider
 import com.sysmetrics.infrastructure.proc.ProcFileReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -34,6 +35,7 @@ import java.util.ArrayDeque
 public class MetricsRepositoryImpl(
     private val procFileReader: ProcFileReader,
     private val androidProvider: AndroidMetricsProvider,
+    private val networkProvider: NetworkMetricsProvider,
     private val cache: MetricsCache
 ) : IMetricsRepository {
 
@@ -49,6 +51,7 @@ public class MetricsRepositoryImpl(
                 if (!isInitialized) {
                     // Reset proc file reader state
                     procFileReader.reset()
+                    networkProvider.reset()
                     
                     // Clear any stale cache
                     cache.clear()
@@ -130,6 +133,7 @@ public class MetricsRepositoryImpl(
                 cache.clear()
                 history.clear()
                 procFileReader.reset()
+                networkProvider.reset()
                 isInitialized = false
             }
         }
@@ -143,6 +147,7 @@ public class MetricsRepositoryImpl(
         val batteryResult = androidProvider.getBatteryMetrics()
         val storageResult = androidProvider.getStorageMetrics()
         val thermalResult = androidProvider.getThermalMetrics()
+        val networkResult = networkProvider.getNetworkMetrics()
 
         return SystemMetrics(
             cpuMetrics = cpuResult.getOrElse { 
@@ -159,6 +164,9 @@ public class MetricsRepositoryImpl(
             },
             storageMetrics = storageResult.getOrElse { 
                 com.sysmetrics.domain.model.StorageMetrics.empty() 
+            },
+            networkMetrics = networkResult.getOrElse {
+                com.sysmetrics.domain.model.NetworkMetrics.empty()
             },
             timestamp = System.currentTimeMillis(),
             uptime = uptimeResult.getOrElse { 0L }

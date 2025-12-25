@@ -2,18 +2,27 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![API](https://img.shields.io/badge/API-21%2B-brightgreen.svg)](https://android-arsenal.com/api?level=21)
+[![Kotlin](https://img.shields.io/badge/Kotlin-1.9.10-blue.svg)](https://kotlinlang.org)
 
-A production-ready Android library for collecting comprehensive system metrics including CPU, memory, battery, thermal, and storage information.
+A production-ready Android library for collecting comprehensive system metrics including CPU, memory, battery, thermal, storage, and network information.
+
+## 📚 Documentation | Документация
+
+| Language | Link |
+|----------|------|
+| 🇬🇧 **English** | [Full Documentation](docs/DOCUMENTATION_EN.md) |
+| 🇷🇺 **Русский** | [Полная документация](docs/DOCUMENTATION_RU.md) |
 
 ## Features
 
-- 📊 **Comprehensive Metrics** - CPU, Memory, Battery, Thermal, and Storage
+- 📊 **Comprehensive Metrics** - CPU, Memory, Battery, Thermal, Storage, and Network
 - 🔄 **Real-time Streaming** - Flow-based reactive API
 - 💪 **Health Scoring** - Automatic system health assessment
 - 🏗️ **Clean Architecture** - Domain/Data/Infrastructure layers
 - 🔒 **Thread-safe** - Safe concurrent access
 - ⚡ **High Performance** - <5ms latency, <5MB memory
 - 🎯 **Zero Dependencies** - Only Kotlin stdlib, Coroutines, Serialization
+- 📤 **Data Export** - CSV and JSON export functionality
 
 ## Installation
 

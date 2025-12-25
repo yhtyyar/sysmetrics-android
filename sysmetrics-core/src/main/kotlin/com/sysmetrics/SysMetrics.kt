@@ -7,6 +7,7 @@ import com.sysmetrics.domain.model.HealthScore
 import com.sysmetrics.domain.model.SystemMetrics
 import com.sysmetrics.domain.repository.IMetricsRepository
 import com.sysmetrics.infrastructure.android.AndroidMetricsProvider
+import com.sysmetrics.infrastructure.android.NetworkMetricsProvider
 import com.sysmetrics.infrastructure.proc.ProcFileReader
 import kotlinx.coroutines.flow.Flow
 import java.util.concurrent.atomic.AtomicBoolean
@@ -108,11 +109,13 @@ public object SysMetrics {
 
             val procFileReader = ProcFileReader()
             val androidProvider = AndroidMetricsProvider(appContext)
+            val networkProvider = NetworkMetricsProvider(appContext)
             val cache = MetricsCache()
 
             val repository = MetricsRepositoryImpl(
                 procFileReader = procFileReader,
                 androidProvider = androidProvider,
+                networkProvider = networkProvider,
                 cache = cache
             )
 
