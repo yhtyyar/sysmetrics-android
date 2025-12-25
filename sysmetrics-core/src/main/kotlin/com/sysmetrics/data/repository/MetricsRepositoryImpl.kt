@@ -4,6 +4,7 @@ import com.sysmetrics.data.aggregation.MetricsAggregationStrategy
 import com.sysmetrics.data.aggregation.SimpleAggregationStrategy
 import com.sysmetrics.data.cache.MetricsCache
 import com.sysmetrics.data.mapper.MetricsMapper
+import com.sysmetrics.domain.logger.MetricsLogger
 import com.sysmetrics.domain.model.AggregatedMetrics
 import com.sysmetrics.domain.model.HealthScore
 import com.sysmetrics.domain.model.SystemMetrics
@@ -11,6 +12,7 @@ import com.sysmetrics.domain.model.TimeWindow
 import com.sysmetrics.domain.repository.IMetricsRepository
 import com.sysmetrics.infrastructure.android.AndroidMetricsProvider
 import com.sysmetrics.infrastructure.android.NetworkMetricsProvider
+import com.sysmetrics.infrastructure.logger.NoOpLogger
 import com.sysmetrics.infrastructure.proc.ProcFileReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -41,7 +43,8 @@ public class MetricsRepositoryImpl(
     private val androidProvider: AndroidMetricsProvider,
     private val networkProvider: NetworkMetricsProvider,
     private val cache: MetricsCache,
-    private val aggregationStrategy: MetricsAggregationStrategy = SimpleAggregationStrategy()
+    private val aggregationStrategy: MetricsAggregationStrategy = SimpleAggregationStrategy(),
+    private val logger: MetricsLogger = NoOpLogger
 ) : IMetricsRepository {
 
     private val mutex = Mutex()
@@ -191,9 +194,27 @@ public class MetricsRepositoryImpl(
 
     override suspend fun getAggregatedMetrics(timeWindow: TimeWindow): Result<AggregatedMetrics> =
         withContext(Dispatchers.IO) {
+            logger.info(TAG, "Aggregating metrics for $timeWindow")
+            val startTime = System.currentTimeMillis()
+            
             safeCall("getAggregatedMetrics") {
                 val metrics = mutex.withLock { history.toList() }
-                aggregationStrategy.aggregate(metrics, timeWindow)
+                val aggregated = aggregationStrategy.aggregate(metrics, timeWindow)
+                
+                val duration = System.currentTimeMillis() - startTime
+                if (logger.isDebugEnabled()) {
+                    logger.debug(TAG, "Aggregation completed: ${metrics.size} samples, ${duration}ms")
+                }
+                
+                // Log warning for high resource usage
+                if (aggregated.cpuPercentAverage > HIGH_CPU_THRESHOLD) {
+                    logger.warn(TAG, "High CPU usage detected: ${aggregated.cpuPercentAverage}%")
+                }
+                if (aggregated.memoryPercentAverage > HIGH_MEMORY_THRESHOLD) {
+                    logger.warn(TAG, "High memory usage detected: ${aggregated.memoryPercentAverage}%")
+                }
+                
+                aggregated
             }
         }
 
@@ -201,6 +222,9 @@ public class MetricsRepositoryImpl(
         timeWindow: TimeWindow,
         count: Int
     ): Result<List<AggregatedMetrics>> = withContext(Dispatchers.IO) {
+        logger.info(TAG, "Getting aggregated history: $timeWindow, count=$count")
+        val startTime = System.currentTimeMillis()
+        
         safeCall("getAggregatedHistory") {
             val metrics = mutex.withLock { history.toList() }
             val nowMillis = System.currentTimeMillis()
@@ -221,6 +245,11 @@ public class MetricsRepositoryImpl(
                 )
             }
             
+            val duration = System.currentTimeMillis() - startTime
+            if (logger.isDebugEnabled()) {
+                logger.debug(TAG, "History aggregation completed: ${results.size} windows, ${duration}ms")
+            }
+            
             results
         }
     }
@@ -232,11 +261,14 @@ public class MetricsRepositoryImpl(
         return try {
             Result.success(block())
         } catch (e: Exception) {
+            logger.error(TAG, "$operation failed: ${e.message}", e)
             Result.failure(MetricsAggregationException("Failed $operation: ${e.message}", e))
         }
     }
 
     public companion object {
+        private const val TAG = "MetricsRepository"
+        
         /** Maximum number of metrics entries to keep in history */
         public const val MAX_HISTORY_SIZE: Int = 300
         
@@ -245,6 +277,12 @@ public class MetricsRepositoryImpl(
         
         /** Interval for health score checks in milliseconds */
         public const val HEALTH_CHECK_INTERVAL_MS: Long = 1000L
+        
+        /** Threshold for high CPU usage warning */
+        public const val HIGH_CPU_THRESHOLD: Float = 90f
+        
+        /** Threshold for high memory usage warning */
+        public const val HIGH_MEMORY_THRESHOLD: Float = 90f
     }
 }
 

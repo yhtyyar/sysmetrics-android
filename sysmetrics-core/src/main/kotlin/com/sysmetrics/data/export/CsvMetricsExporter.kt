@@ -4,8 +4,10 @@ import com.sysmetrics.domain.export.CsvExportConfig
 import com.sysmetrics.domain.export.ExportConfig
 import com.sysmetrics.domain.export.ExportException
 import com.sysmetrics.domain.export.MetricsExporter
+import com.sysmetrics.domain.logger.MetricsLogger
 import com.sysmetrics.domain.model.AggregatedMetrics
 import com.sysmetrics.domain.model.SystemMetrics
+import com.sysmetrics.infrastructure.logger.NoOpLogger
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.TimeZone
@@ -37,7 +39,9 @@ import java.util.TimeZone
  * File("metrics.csv").writeText(csv)
  * ```
  */
-public class CsvMetricsExporter : MetricsExporter {
+public class CsvMetricsExporter(
+    private val logger: MetricsLogger = NoOpLogger
+) : MetricsExporter {
 
     override val mimeType: String = "text/csv"
     override val formatName: String = "csv"
@@ -67,9 +71,16 @@ public class CsvMetricsExporter : MetricsExporter {
         config: ExportConfig
     ): String {
         val csvConfig = config as? CsvExportConfig ?: CsvExportConfig()
+        logger.info(TAG, "Exporting ${metrics.size} raw metrics to CSV")
+        
+        if (logger.isDebugEnabled()) {
+            logger.debug(TAG, "Config: delimiter='${csvConfig.delimiter}', bom=${csvConfig.includeUtf8Bom}, headers=${csvConfig.includeHeaders}")
+        }
+        
+        val startTime = System.currentTimeMillis()
         
         return try {
-            buildString {
+            val result = buildString {
                 // UTF-8 BOM for Excel compatibility
                 if (csvConfig.includeUtf8Bom) {
                     append(UTF8_BOM)
@@ -88,7 +99,13 @@ public class CsvMetricsExporter : MetricsExporter {
                     append(csvConfig.lineEnding)
                 }
             }
+            
+            val duration = System.currentTimeMillis() - startTime
+            logger.info(TAG, "Export completed: ${result.length} bytes in ${duration}ms")
+            
+            result
         } catch (e: Exception) {
+            logger.error(TAG, "Export failed: ${e.message}", e)
             throw ExportException(formatName, "Failed to export raw metrics: ${e.message}", e)
         }
     }
@@ -122,9 +139,12 @@ public class CsvMetricsExporter : MetricsExporter {
         config: ExportConfig
     ): String {
         val csvConfig = config as? CsvExportConfig ?: CsvExportConfig()
+        logger.info(TAG, "Exporting ${aggregated.size} aggregated metrics to CSV")
+        
+        val startTime = System.currentTimeMillis()
         
         return try {
-            buildString {
+            val result = buildString {
                 // UTF-8 BOM for Excel compatibility
                 if (csvConfig.includeUtf8Bom) {
                     append(UTF8_BOM)
@@ -143,7 +163,13 @@ public class CsvMetricsExporter : MetricsExporter {
                     append(csvConfig.lineEnding)
                 }
             }
+            
+            val duration = System.currentTimeMillis() - startTime
+            logger.info(TAG, "Export completed: ${result.length} bytes in ${duration}ms")
+            
+            result
         } catch (e: Exception) {
+            logger.error(TAG, "Export failed: ${e.message}", e)
             throw ExportException(formatName, "Failed to export aggregated metrics: ${e.message}", e)
         }
     }
@@ -295,6 +321,8 @@ public class CsvMetricsExporter : MetricsExporter {
     }
 
     public companion object {
+        private const val TAG = "CsvExporter"
+        
         /** UTF-8 Byte Order Mark for Excel compatibility */
         public const val UTF8_BOM: String = "\uFEFF"
 

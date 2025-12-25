@@ -7,6 +7,7 @@ import com.sysmetrics.data.export.ExportManager
 import com.sysmetrics.data.repository.MetricsRepositoryImpl
 import com.sysmetrics.domain.export.ExportConfig
 import com.sysmetrics.domain.export.MetricsExporter
+import com.sysmetrics.domain.logger.MetricsLogger
 import com.sysmetrics.domain.model.AggregatedMetrics
 import com.sysmetrics.domain.model.HealthScore
 import com.sysmetrics.domain.model.SystemMetrics
@@ -14,6 +15,8 @@ import com.sysmetrics.domain.model.TimeWindow
 import com.sysmetrics.domain.repository.IMetricsRepository
 import com.sysmetrics.infrastructure.android.AndroidMetricsProvider
 import com.sysmetrics.infrastructure.android.NetworkMetricsProvider
+import com.sysmetrics.infrastructure.logger.AndroidMetricsLogger
+import com.sysmetrics.infrastructure.logger.NoOpLogger
 import com.sysmetrics.infrastructure.proc.ProcFileReader
 import kotlinx.coroutines.flow.Flow
 import java.util.concurrent.atomic.AtomicBoolean
@@ -69,6 +72,7 @@ public object SysMetrics {
     private val repositoryRef = AtomicReference<IMetricsRepository?>(null)
     private val contextRef = AtomicReference<Context?>(null)
     private val exportManagerRef = AtomicReference<ExportManager?>(null)
+    private val loggerRef = AtomicReference<MetricsLogger>(NoOpLogger)
 
     /**
      * Library version string.
@@ -89,6 +93,7 @@ public object SysMetrics {
      * Recommended to call in [android.app.Application.onCreate].
      *
      * @param context Application context (will be stored as application context)
+     * @param logger Optional custom logger (default: AndroidMetricsLogger)
      * @throws IllegalStateException if context is null
      *
      * Example:
@@ -96,12 +101,16 @@ public object SysMetrics {
      * class MyApplication : Application() {
      *     override fun onCreate() {
      *         super.onCreate()
+     *         // Default logger
      *         SysMetrics.initialize(this)
+     *         
+     *         // Custom logger
+     *         SysMetrics.initialize(this, AndroidMetricsLogger.forDevelopment())
      *     }
      * }
      * ```
      */
-    public fun initialize(context: Context) {
+    public fun initialize(context: Context, logger: MetricsLogger = AndroidMetricsLogger()) {
         if (initialized.get()) {
             return
         }
@@ -113,6 +122,9 @@ public object SysMetrics {
 
             val appContext = context.applicationContext
             contextRef.set(appContext)
+            loggerRef.set(logger)
+            
+            logger.info(TAG, "Initializing SysMetrics v$VERSION")
 
             val procFileReader = ProcFileReader()
             val androidProvider = AndroidMetricsProvider(appContext)
@@ -123,15 +135,17 @@ public object SysMetrics {
                 procFileReader = procFileReader,
                 androidProvider = androidProvider,
                 networkProvider = networkProvider,
-                cache = cache
+                cache = cache,
+                logger = logger
             )
 
             repositoryRef.set(repository)
             
             // Initialize export manager with default exporters
-            exportManagerRef.set(ExportManager.withAllExporters())
+            exportManagerRef.set(ExportManager.withAllExporters(logger))
             
             initialized.set(true)
+            logger.info(TAG, "SysMetrics initialized successfully")
         }
     }
 
@@ -527,4 +541,6 @@ public object SysMetrics {
             )
         }
     }
+
+    private const val TAG = "SysMetrics"
 }

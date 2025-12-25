@@ -3,8 +3,10 @@ package com.sysmetrics.data.export
 import com.sysmetrics.domain.export.ExportConfig
 import com.sysmetrics.domain.export.ExportException
 import com.sysmetrics.domain.export.MetricsExporter
+import com.sysmetrics.domain.logger.MetricsLogger
 import com.sysmetrics.domain.model.AggregatedMetrics
 import com.sysmetrics.domain.model.SystemMetrics
+import com.sysmetrics.infrastructure.logger.NoOpLogger
 
 /**
  * Manages metrics export operations with multiple format support.
@@ -31,7 +33,8 @@ import com.sysmetrics.domain.model.SystemMetrics
  * @param exporters Map of format names to exporter implementations
  */
 public class ExportManager private constructor(
-    private val exporters: Map<String, MetricsExporter>
+    private val exporters: Map<String, MetricsExporter>,
+    private val logger: MetricsLogger = NoOpLogger
 ) {
 
     /**
@@ -42,8 +45,12 @@ public class ExportManager private constructor(
      *
      * @param exporterList List of exporters to register
      */
-    public constructor(exporterList: List<MetricsExporter>) : this(
-        exporterList.associateBy { it.formatName.lowercase() }
+    public constructor(
+        exporterList: List<MetricsExporter>,
+        logger: MetricsLogger = NoOpLogger
+    ) : this(
+        exporterList.associateBy { it.formatName.lowercase() },
+        logger
     )
 
     /**
@@ -51,7 +58,10 @@ public class ExportManager private constructor(
      *
      * Default exporters: CSV
      */
-    public constructor() : this(listOf(CsvMetricsExporter()))
+    public constructor(logger: MetricsLogger = NoOpLogger) : this(
+        listOf(CsvMetricsExporter(logger)),
+        logger
+    )
 
     /**
      * Exports raw system metrics to the specified format.
@@ -185,28 +195,34 @@ public class ExportManager private constructor(
         return try {
             Result.success(block())
         } catch (e: ExportException) {
+            logger.error(TAG, "Export to $format failed: ${e.reason}", e)
             Result.failure(e)
         } catch (e: Exception) {
+            logger.error(TAG, "Export to $format failed: ${e.message}", e)
             Result.failure(ExportException(format, e.message ?: "Unknown error", e))
         }
     }
 
     public companion object {
+        private const val TAG = "ExportManager"
+        
         /**
          * Creates an ExportManager with all available exporters.
          */
-        public fun withAllExporters(): ExportManager = ExportManager(
+        public fun withAllExporters(logger: MetricsLogger = NoOpLogger): ExportManager = ExportManager(
             listOf(
-                CsvMetricsExporter()
+                CsvMetricsExporter(logger)
                 // Add more exporters here as they are implemented
-            )
+            ),
+            logger
         )
 
         /**
          * Creates an ExportManager with only CSV exporter.
          */
-        public fun csvOnly(): ExportManager = ExportManager(
-            listOf(CsvMetricsExporter())
+        public fun csvOnly(logger: MetricsLogger = NoOpLogger): ExportManager = ExportManager(
+            listOf(CsvMetricsExporter(logger)),
+            logger
         )
     }
 }
