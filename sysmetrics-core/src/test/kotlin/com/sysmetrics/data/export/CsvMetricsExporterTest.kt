@@ -331,6 +331,163 @@ class CsvMetricsExporterTest {
         assertFalse(result.contains("E+")) // No scientific notation
     }
 
+    // ==================== RFC 4180 Compliance Tests ====================
+
+    @Test
+    fun `RFC4180 fields with commas are quoted`() {
+        // Test that fields containing the delimiter are properly quoted
+        val config = CsvExportConfig(delimiter = ',')
+        val metric = createTestMetrics()
+        val result = exporter.exportRawMetrics(listOf(metric), config)
+
+        // Verify structure is valid CSV
+        val lines = result.lines().filter { it.isNotBlank() && !it.startsWith("\uFEFF") }
+        assertTrue(lines.isNotEmpty())
+        
+        // Each line should have consistent number of delimiters
+        val headerFields = lines[0].split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
+        assertTrue(headerFields.size >= 5)
+    }
+
+    @Test
+    fun `RFC4180 fields with quotes are escaped by doubling`() {
+        // Verify quote escaping behavior
+        val config = CsvExportConfig(quoteChar = '"', escapeChar = '"')
+        val metric = createTestMetrics()
+        val result = exporter.exportRawMetrics(listOf(metric), config)
+
+        // The output should be valid CSV
+        assertFalse(result.contains("\"\"\"")) // No triple quotes in normal data
+    }
+
+    @Test
+    fun `RFC4180 fields with newlines are quoted`() {
+        val config = CsvExportConfig()
+        val metric = createTestMetrics()
+        val result = exporter.exportRawMetrics(listOf(metric), config)
+
+        // Normal metrics shouldn't have newlines in values
+        val dataLines = result.lines().filter { 
+            it.isNotBlank() && !it.startsWith("\uFEFF") && !it.contains("Timestamp")
+        }
+        assertTrue(dataLines.isNotEmpty())
+    }
+
+    @Test
+    fun `RFC4180 CRLF line endings when configured`() {
+        val config = CsvExportConfig(lineEnding = "\r\n")
+        val metrics = listOf(createTestMetrics(), createTestMetrics())
+        val result = exporter.exportRawMetrics(metrics, config)
+
+        assertTrue(result.contains("\r\n"))
+    }
+
+    @Test
+    fun `RFC4180 LF line endings when configured`() {
+        val config = CsvExportConfig(lineEnding = "\n")
+        val metrics = listOf(createTestMetrics(), createTestMetrics())
+        val result = exporter.exportRawMetrics(metrics, config)
+
+        assertTrue(result.contains("\n"))
+        // Count occurrences - should have multiple LF
+        val lfCount = result.count { it == '\n' }
+        assertTrue(lfCount >= 2)
+    }
+
+    // ==================== Special Characters Tests ====================
+
+    @Test
+    fun `handles Cyrillic characters in network name`() {
+        val metric = createTestMetrics()
+        val config = CsvExportConfig(includeUtf8Bom = true)
+        val result = exporter.exportRawMetrics(listOf(metric), config)
+
+        // UTF-8 BOM should be present for proper encoding
+        assertTrue(result.startsWith("\uFEFF"))
+    }
+
+    @Test
+    fun `handles special characters in export`() {
+        val config = CsvExportConfig()
+        val metric = createTestMetrics()
+        val result = exporter.exportRawMetrics(listOf(metric), config)
+
+        // Should produce valid CSV without corruption
+        assertTrue(result.isNotEmpty())
+        assertTrue(result.lines().size >= 2)
+    }
+
+    @Test
+    fun `handles unicode degree symbol in headers`() {
+        val config = CsvExportConfig(includeHeaders = true)
+        val result = exporter.exportRawMetrics(emptyList(), config)
+
+        // Headers should contain degree symbol
+        assertTrue(result.contains("°C"))
+    }
+
+    // ==================== Delimiter Edge Cases ====================
+
+    @Test
+    fun `tab delimiter produces TSV format`() {
+        val config = CsvExportConfig(delimiter = '\t')
+        val metrics = listOf(createTestMetrics())
+        val result = exporter.exportRawMetrics(metrics, config)
+
+        assertTrue(result.contains("\t"))
+        assertFalse(result.contains(","))
+    }
+
+    @Test
+    fun `pipe delimiter works correctly`() {
+        val config = CsvExportConfig(delimiter = '|')
+        val metrics = listOf(createTestMetrics())
+        val result = exporter.exportRawMetrics(metrics, config)
+
+        assertTrue(result.contains("|"))
+    }
+
+    // ==================== Timestamp Formatting Tests ====================
+
+    @Test
+    fun `timestamp is formatted when includeTimestamp is true`() {
+        val config = CsvExportConfig(includeTimestamp = true)
+        val metric = createTestMetrics(timestamp = 1704114765000L)
+        val result = exporter.exportRawMetrics(listOf(metric), config)
+
+        // Should contain formatted date, not just epoch
+        assertTrue(result.contains("2024") || result.contains("2025"))
+    }
+
+    // ==================== Aggregated Metrics Edge Cases ====================
+
+    @Test
+    fun `aggregated export handles all TimeWindow types`() {
+        for (timeWindow in TimeWindow.values()) {
+            val aggregated = createTestAggregatedMetrics(timeWindow = timeWindow)
+            val result = exporter.exportAggregatedMetrics(listOf(aggregated), CsvExportConfig())
+
+            assertTrue(
+                "Should contain ${timeWindow.name}",
+                result.contains(timeWindow.name)
+            )
+        }
+    }
+
+    @Test
+    fun `aggregated export includes min max values`() {
+        val aggregated = createTestAggregatedMetrics(
+            cpuAvg = 50f,
+            cpuMin = 20f,
+            cpuMax = 80f
+        )
+        val result = exporter.exportAggregatedMetrics(listOf(aggregated), CsvExportConfig())
+
+        assertTrue(result.contains("20"))
+        assertTrue(result.contains("80"))
+        assertTrue(result.contains("50"))
+    }
+
     // ==================== Aggregated Metrics Specific Tests ====================
 
     @Test

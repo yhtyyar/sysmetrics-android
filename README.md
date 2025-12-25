@@ -193,6 +193,132 @@ lifecycleScope.launch {
 - **BatteryHealth** - UNKNOWN, GOOD, OVERHEAT, DEAD, OVER_VOLTAGE, UNSPECIFIED_FAILURE, COLD
 - **HealthIssue** - HIGH_CPU_USAGE, HIGH_MEMORY_USAGE, HIGH_TEMPERATURE, LOW_BATTERY, THERMAL_THROTTLING, LOW_STORAGE, POOR_PERFORMANCE
 
+## Advanced Features
+
+### Metrics Aggregation
+
+Aggregate metrics over configurable time windows for trend analysis:
+
+```kotlin
+// Get aggregated metrics for the last 5-minute window
+lifecycleScope.launch {
+    SysMetrics.getAggregatedMetrics(TimeWindow.FIVE_MINUTES)
+        .onSuccess { aggregated ->
+            println("Avg CPU: ${aggregated.cpuPercentAverage}%")
+            println("Min CPU: ${aggregated.cpuPercentMin}%")
+            println("Max CPU: ${aggregated.cpuPercentMax}%")
+            println("Samples: ${aggregated.sampleCount}")
+            
+            // Use for chart drawing
+            drawCpuGauge(aggregated.cpuPercentAverage)
+        }
+}
+
+// Get historical aggregated data (e.g., last hour as 12 five-minute windows)
+lifecycleScope.launch {
+    SysMetrics.getAggregatedHistory(TimeWindow.FIVE_MINUTES, count = 12)
+        .onSuccess { history ->
+            val cpuTrend = history.map { it.cpuPercentAverage }
+            val memoryTrend = history.map { it.memoryPercentAverage }
+            
+            drawTrendChart(cpuTrend, memoryTrend)
+        }
+}
+```
+
+Available time windows: `ONE_MINUTE`, `FIVE_MINUTES`, `THIRTY_MINUTES`, `ONE_HOUR`
+
+### Data Export
+
+Export metrics to CSV format (RFC 4180 compliant):
+
+```kotlin
+// Export raw metrics to CSV
+lifecycleScope.launch {
+    val history = SysMetrics.getMetricsHistory(100).getOrNull() ?: emptyList()
+    
+    SysMetrics.exportMetrics(
+        metrics = history,
+        format = "csv",
+        config = CsvExportConfig.forExcel() // UTF-8 BOM, comma delimiter
+    ).onSuccess { csv ->
+        // Save to file
+        File(context.cacheDir, "metrics.csv").writeText(csv)
+        
+        // Or share
+        shareFile("metrics.csv", csv, "text/csv")
+    }
+}
+
+// Export aggregated metrics
+lifecycleScope.launch {
+    val aggregated = SysMetrics.getAggregatedHistory(TimeWindow.FIVE_MINUTES, 12)
+        .getOrNull() ?: emptyList()
+    
+    SysMetrics.exportAggregatedMetrics(aggregated, "csv")
+        .onSuccess { csv ->
+            saveToDownloads("hourly_report.csv", csv)
+        }
+}
+
+// Custom CSV configuration
+val europeanConfig = CsvExportConfig(
+    delimiter = ';',           // Semicolon for European locales
+    includeUtf8Bom = true,     // Excel compatibility
+    includeHeaders = true,
+    lineEnding = "\r\n"        // RFC 4180 compliant
+)
+```
+
+### Logging Configuration
+
+Configure logging for debugging and monitoring:
+
+```kotlin
+// Default logging (INFO level)
+SysMetrics.initialize(context)
+
+// Development mode (DEBUG level - verbose logging)
+SysMetrics.initialize(
+    context,
+    logger = AndroidMetricsLogger.forDevelopment()
+)
+
+// Production mode (WARN level - minimal logging)
+SysMetrics.initialize(
+    context,
+    logger = AndroidMetricsLogger.forProduction()
+)
+
+// Custom log level
+SysMetrics.initialize(
+    context,
+    logger = AndroidMetricsLogger(
+        tag = "MyApp",
+        minLevel = LogLevel.DEBUG
+    )
+)
+
+// File logging with rotation
+val logFile = File(context.filesDir, "sysmetrics.log")
+val fileLogger = FileMetricsLogger(
+    logFile = logFile,
+    maxSizeBytes = 5 * 1024 * 1024,  // 5 MB
+    maxBackupFiles = 3
+)
+SysMetrics.initialize(context, fileLogger)
+
+// Combined logging (Android + File)
+val compositeLogger = CompositeMetricsLogger(
+    AndroidMetricsLogger(),
+    FileMetricsLogger(logFile)
+)
+SysMetrics.initialize(context, compositeLogger)
+
+// Disable logging completely
+SysMetrics.initialize(context, NoOpLogger)
+```
+
 ## Health Score Calculation
 
 The health score (0-100) is calculated using weighted factors:
@@ -220,14 +346,19 @@ The health score (0-100) is calculated using weighted factors:
 sysmetrics-core/
 ├── domain/
 │   ├── model/          # Data classes & enums
-│   └── repository/     # IMetricsRepository interface
+│   ├── repository/     # IMetricsRepository interface
+│   ├── logger/         # MetricsLogger interface
+│   └── export/         # MetricsExporter interface
 ├── data/
 │   ├── repository/     # MetricsRepositoryImpl
+│   ├── aggregation/    # MetricsAggregationStrategy
+│   ├── export/         # CsvMetricsExporter, ExportManager
 │   ├── mapper/         # Data transformers
 │   └── cache/          # MetricsCache (500ms TTL)
 ├── infrastructure/
 │   ├── proc/           # ProcFileReader (/proc files)
 │   ├── android/        # AndroidMetricsProvider
+│   ├── logger/         # AndroidMetricsLogger, FileMetricsLogger
 │   └── extension/      # Utility extensions
 └── SysMetrics.kt       # Public API singleton
 ```
