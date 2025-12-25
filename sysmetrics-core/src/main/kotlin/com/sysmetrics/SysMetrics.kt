@@ -2,7 +2,11 @@ package com.sysmetrics
 
 import android.content.Context
 import com.sysmetrics.data.cache.MetricsCache
+import com.sysmetrics.data.export.CsvMetricsExporter
+import com.sysmetrics.data.export.ExportManager
 import com.sysmetrics.data.repository.MetricsRepositoryImpl
+import com.sysmetrics.domain.export.ExportConfig
+import com.sysmetrics.domain.export.MetricsExporter
 import com.sysmetrics.domain.model.AggregatedMetrics
 import com.sysmetrics.domain.model.HealthScore
 import com.sysmetrics.domain.model.SystemMetrics
@@ -64,6 +68,7 @@ public object SysMetrics {
     private val initialized = AtomicBoolean(false)
     private val repositoryRef = AtomicReference<IMetricsRepository?>(null)
     private val contextRef = AtomicReference<Context?>(null)
+    private val exportManagerRef = AtomicReference<ExportManager?>(null)
 
     /**
      * Library version string.
@@ -122,6 +127,10 @@ public object SysMetrics {
             )
 
             repositoryRef.set(repository)
+            
+            // Initialize export manager with default exporters
+            exportManagerRef.set(ExportManager.withAllExporters())
+            
             initialized.set(true)
         }
     }
@@ -406,6 +415,109 @@ public object SysMetrics {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    // ==================== Export API ====================
+
+    /**
+     * Exports raw system metrics to the specified format.
+     *
+     * Supported formats depend on registered exporters. Default: "csv".
+     *
+     * @param metrics List of system metrics to export
+     * @param format Format name (e.g., "csv", "json")
+     * @param config Export configuration (use format-specific config for more options)
+     * @return [Result.success] with exported string or [Result.failure] with exception
+     *
+     * Example:
+     * ```kotlin
+     * val history = SysMetrics.getMetricsHistory(count = 100).getOrNull() ?: emptyList()
+     * SysMetrics.exportMetrics(history, "csv", CsvExportConfig.forExcel())
+     *     .onSuccess { csv ->
+     *         File(cacheDir, "metrics.csv").writeText(csv)
+     *     }
+     *     .onFailure { error ->
+     *         Log.e("SysMetrics", "Export failed", error)
+     *     }
+     * ```
+     */
+    public fun exportMetrics(
+        metrics: List<SystemMetrics>,
+        format: String = "csv",
+        config: ExportConfig = ExportConfig()
+    ): Result<String> {
+        return try {
+            checkInitialized()
+            val exportManager = exportManagerRef.get()
+                ?: return Result.failure(IllegalStateException("ExportManager not initialized"))
+            exportManager.exportRawMetrics(metrics, format, config)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Exports aggregated metrics to the specified format.
+     *
+     * Useful for exporting trend analysis data and charts.
+     *
+     * @param aggregated List of aggregated metrics to export
+     * @param format Format name (e.g., "csv", "json")
+     * @param config Export configuration
+     * @return [Result.success] with exported string or [Result.failure] with exception
+     *
+     * Example:
+     * ```kotlin
+     * val history = SysMetrics.getAggregatedHistory(TimeWindow.FIVE_MINUTES, 12)
+     *     .getOrNull() ?: emptyList()
+     * SysMetrics.exportAggregatedMetrics(history, "csv")
+     *     .onSuccess { csv ->
+     *         shareFile(csv, "metrics_hourly.csv")
+     *     }
+     * ```
+     */
+    public fun exportAggregatedMetrics(
+        aggregated: List<AggregatedMetrics>,
+        format: String = "csv",
+        config: ExportConfig = ExportConfig()
+    ): Result<String> {
+        return try {
+            checkInitialized()
+            val exportManager = exportManagerRef.get()
+                ?: return Result.failure(IllegalStateException("ExportManager not initialized"))
+            exportManager.exportAggregatedMetrics(aggregated, format, config)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Returns the list of supported export formats.
+     *
+     * @return List of format names (e.g., ["csv", "json"])
+     */
+    public fun getSupportedExportFormats(): List<String> {
+        return exportManagerRef.get()?.getSupportedFormats() ?: emptyList()
+    }
+
+    /**
+     * Returns the MIME type for a given export format.
+     *
+     * @param format Format name
+     * @return MIME type string or null if format is not supported
+     */
+    public fun getExportMimeType(format: String): String? {
+        return exportManagerRef.get()?.getMimeType(format)
+    }
+
+    /**
+     * Returns the file extension for a given export format.
+     *
+     * @param format Format name
+     * @return File extension (without dot) or null if format is not supported
+     */
+    public fun getExportFileExtension(format: String): String? {
+        return exportManagerRef.get()?.getFileExtension(format)
     }
 
     private fun checkInitialized() {

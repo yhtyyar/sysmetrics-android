@@ -129,6 +129,29 @@ lifecycleScope.launch {
 }
 ```
 
+### Export Metrics
+
+```kotlin
+// Export raw metrics to CSV
+lifecycleScope.launch {
+    val history = SysMetrics.getMetricsHistory(100).getOrNull() ?: emptyList()
+    SysMetrics.exportMetrics(history, "csv", CsvExportConfig.forExcel())
+        .onSuccess { csv ->
+            File(cacheDir, "metrics.csv").writeText(csv)
+        }
+}
+
+// Export aggregated metrics
+lifecycleScope.launch {
+    val aggregated = SysMetrics.getAggregatedHistory(TimeWindow.FIVE_MINUTES, 12)
+        .getOrNull() ?: emptyList()
+    SysMetrics.exportAggregatedMetrics(aggregated, "csv")
+        .onSuccess { csv ->
+            shareFile("metrics_hourly.csv", csv)
+        }
+}
+```
+
 ## API Reference
 
 ### SysMetrics Singleton
@@ -142,6 +165,9 @@ lifecycleScope.launch {
 | `getMetricsHistory(count)` | Get historical metrics |
 | `getAggregatedMetrics(timeWindow)` | Get aggregated metrics for a time window |
 | `getAggregatedHistory(timeWindow, count)` | Get historical aggregated metrics |
+| `exportMetrics(metrics, format, config)` | Export raw metrics to CSV/JSON |
+| `exportAggregatedMetrics(aggregated, format)` | Export aggregated metrics |
+| `getSupportedExportFormats()` | Get list of supported export formats |
 | `clearHistory()` | Clear metrics history |
 | `destroy()` | Release all resources |
 
@@ -157,6 +183,8 @@ lifecycleScope.launch {
 - **HealthScore** - Overall system health assessment
 - **AggregatedMetrics** - Aggregated statistics over time window
 - **TimeWindow** - Time window for aggregation (1min, 5min, 30min, 1hour)
+- **ExportConfig** - Base configuration for metrics export
+- **CsvExportConfig** - CSV-specific export configuration (RFC 4180)
 
 ### Enums
 
