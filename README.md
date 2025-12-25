@@ -106,59 +106,13 @@ override fun onTerminate() {
 }
 ```
 
-### Aggregated Metrics
-
-```kotlin
-// Get aggregated metrics for the last 5-minute window
-lifecycleScope.launch {
-    SysMetrics.getAggregatedMetrics(TimeWindow.FIVE_MINUTES)
-        .onSuccess { metrics ->
-            println("Avg CPU: ${metrics.cpuPercentAverage}%")
-            println("Avg Memory: ${metrics.memoryPercentAverage}%")
-            println("Samples: ${metrics.sampleCount}")
-        }
-}
-
-// Get hourly chart data (12 five-minute intervals)
-lifecycleScope.launch {
-    SysMetrics.getAggregatedHistory(TimeWindow.FIVE_MINUTES, count = 12)
-        .onSuccess { history ->
-            val cpuTrend = history.map { it.cpuPercentAverage }
-            plotChart(cpuTrend)
-        }
-}
-```
-
-### Export Metrics
-
-```kotlin
-// Export raw metrics to CSV
-lifecycleScope.launch {
-    val history = SysMetrics.getMetricsHistory(100).getOrNull() ?: emptyList()
-    SysMetrics.exportMetrics(history, "csv", CsvExportConfig.forExcel())
-        .onSuccess { csv ->
-            File(cacheDir, "metrics.csv").writeText(csv)
-        }
-}
-
-// Export aggregated metrics
-lifecycleScope.launch {
-    val aggregated = SysMetrics.getAggregatedHistory(TimeWindow.FIVE_MINUTES, 12)
-        .getOrNull() ?: emptyList()
-    SysMetrics.exportAggregatedMetrics(aggregated, "csv")
-        .onSuccess { csv ->
-            shareFile("metrics_hourly.csv", csv)
-        }
-}
-```
-
 ## API Reference
 
 ### SysMetrics Singleton
 
 | Method | Description |
 |--------|-------------|
-| `initialize(context)` | Initialize the library (call once) |
+| `initialize(context, logger)` | Initialize the library with optional logger |
 | `getCurrentMetrics()` | Get current system metrics snapshot |
 | `observeMetrics(intervalMs)` | Stream metrics at specified interval |
 | `observeHealthScore()` | Stream health score updates |
@@ -185,6 +139,8 @@ lifecycleScope.launch {
 - **TimeWindow** - Time window for aggregation (1min, 5min, 30min, 1hour)
 - **ExportConfig** - Base configuration for metrics export
 - **CsvExportConfig** - CSV-specific export configuration (RFC 4180)
+- **MetricsLogger** - Logging interface for diagnostics
+- **LogLevel** - Log level enumeration (DEBUG, INFO, WARN, ERROR)
 
 ### Enums
 

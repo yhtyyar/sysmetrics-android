@@ -26,7 +26,6 @@ import com.sysmetrics.domain.model.SystemMetrics
  * ```
  *
  * @see CsvExportConfig for CSV-specific configuration
- * @see JsonExportConfig for JSON-specific configuration
  */
 public interface MetricsExporter {
 
