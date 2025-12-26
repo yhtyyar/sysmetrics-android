@@ -23,6 +23,7 @@ A production-ready Android library for collecting comprehensive system metrics i
 - ⚡ **High Performance** - <5ms latency, <5MB memory
 - 🎯 **Zero Dependencies** - Only Kotlin stdlib, Coroutines, Serialization
 - 📤 **Data Export** - CSV and JSON export functionality
+- 🖥️ **Debug Overlay** - In-app HUD for real-time metrics visualization (optional module)
 
 ## Installation
 
@@ -30,7 +31,11 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
+    // Core metrics library
     implementation("com.sysmetrics:sysmetrics-core:1.0.0")
+    
+    // Optional: Debug overlay (HUD)
+    debugImplementation("com.sysmetrics:sysmetrics-overlay:1.0.0")
 }
 ```
 
@@ -105,6 +110,31 @@ override fun onTerminate() {
     }
 }
 ```
+
+### Debug Overlay (Optional)
+
+Show real-time metrics overlay in your app:
+
+```kotlin
+class MainActivity : AppCompatActivity() {
+    private var overlayHandle: OverlayHandle? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        
+        // Attach overlay (debug builds only by default)
+        overlayHandle = SysMetricsOverlay.attach(this)
+    }
+
+    override fun onDestroy() {
+        overlayHandle?.detach()
+        super.onDestroy()
+    }
+}
+```
+
+The overlay shows FPS, CPU%, RAM%, and network speed. Tap "▼ More" to expand and see all metrics. See [OVERLAY_GUIDE.md](docs/OVERLAY_GUIDE.md) for full documentation.
 
 ## API Reference
 
@@ -299,24 +329,33 @@ The health score (0-100) is calculated using weighted factors:
 ## Architecture
 
 ```
-sysmetrics-core/
+sysmetrics-core/                    # Core metrics library (no UI dependencies)
 ├── domain/
-│   ├── model/          # Data classes & enums
-│   ├── repository/     # IMetricsRepository interface
-│   ├── logger/         # MetricsLogger interface
-│   └── export/         # MetricsExporter interface
+│   ├── model/                      # Data classes & enums
+│   ├── repository/                 # IMetricsRepository interface
+│   ├── logger/                     # MetricsLogger interface
+│   └── export/                     # MetricsExporter interface
 ├── data/
-│   ├── repository/     # MetricsRepositoryImpl
-│   ├── aggregation/    # MetricsAggregationStrategy
-│   ├── export/         # CsvMetricsExporter, ExportManager
-│   ├── mapper/         # Data transformers
-│   └── cache/          # MetricsCache (500ms TTL)
+│   ├── repository/                 # MetricsRepositoryImpl
+│   ├── aggregation/                # MetricsAggregationStrategy
+│   ├── export/                     # CsvMetricsExporter, ExportManager
+│   ├── mapper/                     # Data transformers
+│   └── cache/                      # MetricsCache (500ms TTL)
 ├── infrastructure/
-│   ├── proc/           # ProcFileReader (/proc files)
-│   ├── android/        # AndroidMetricsProvider
-│   ├── logger/         # AndroidMetricsLogger, FileMetricsLogger
-│   └── extension/      # Utility extensions
-└── SysMetrics.kt       # Public API singleton
+│   ├── proc/                       # ProcFileReader (/proc files)
+│   ├── android/                    # AndroidMetricsProvider
+│   ├── logger/                     # AndroidMetricsLogger, FileMetricsLogger
+│   └── extension/                  # Utility extensions
+└── SysMetrics.kt                   # Public API singleton
+
+sysmetrics-overlay/                 # Optional debug overlay module
+├── SysMetricsOverlay.kt            # Public API
+├── OverlayConfig.kt                # Configuration
+├── OverlayHandle.kt                # Control interface
+├── fps/
+│   └── FrameRateMonitor.kt         # FPS monitoring (Choreographer)
+└── view/
+    └── MetricsOverlayView.kt       # UI component
 ```
 
 ## Requirements

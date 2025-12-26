@@ -16,9 +16,10 @@
 6. [Data Models](#data-models)
 7. [Usage Examples](#usage-examples)
 8. [Data Export](#data-export)
-9. [Performance](#performance)
-10. [Best Practices](#best-practices)
-11. [Troubleshooting](#troubleshooting)
+9. [Debug Overlay (HUD)](#debug-overlay-hud)
+10. [Performance](#performance)
+11. [Best Practices](#best-practices)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -36,6 +37,7 @@
 - ⚡ **High Performance** — <5ms latency, <5MB memory
 - 🎯 **Zero Dependencies** — Only Kotlin stdlib, Coroutines, Serialization
 - 📤 **Data Export** — CSV and JSON formats
+- 🖥️ **Debug Overlay** — In-app HUD for real-time metrics visualization
 
 ---
 
@@ -693,6 +695,63 @@ class MyActivity : AppCompatActivity() {
     }
 }
 ```
+
+---
+
+## Debug Overlay (HUD)
+
+The `sysmetrics-overlay` module provides an in-app overlay for real-time metrics visualization.
+
+### Installation
+
+```kotlin
+dependencies {
+    implementation("com.sysmetrics:sysmetrics-core:1.0.0")
+    implementation("com.sysmetrics:sysmetrics-overlay:1.0.0")
+}
+```
+
+### Basic Usage
+
+```kotlin
+class MainActivity : AppCompatActivity() {
+    private var overlayHandle: OverlayHandle? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        // Attach overlay (debug builds only by default)
+        overlayHandle = SysMetricsOverlay.attach(this)
+    }
+
+    override fun onDestroy() {
+        overlayHandle?.detach()
+        super.onDestroy()
+    }
+}
+```
+
+### Features
+
+- **Collapsed mode**: FPS, CPU%, RAM%, Network speed
+- **Expanded mode**: Full metrics (tap "▼ More")
+- **Drag & drop**: Reposition overlay anywhere
+- **Color coding**: Green/Yellow/Red status indicators
+
+### Configuration
+
+```kotlin
+val config = OverlayConfig(
+    updateIntervalMs = 500L,
+    showFps = true,
+    showNetworkSpeed = true,
+    draggable = true,
+    enableInRelease = false  // Safe for production
+)
+val handle = SysMetricsOverlay.attach(activity, config)
+```
+
+📖 **Full documentation:** [OVERLAY_GUIDE.md](OVERLAY_GUIDE.md)
 
 ---
 

@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "sysmetrics-android"
 include(":sysmetrics-core")
+include(":sysmetrics-overlay")
