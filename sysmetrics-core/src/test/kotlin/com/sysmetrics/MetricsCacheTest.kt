@@ -2,6 +2,8 @@ package com.sysmetrics
 
 import com.sysmetrics.data.cache.MetricsCache
 import com.sysmetrics.domain.model.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
@@ -131,14 +133,14 @@ class MetricsCacheTest {
     fun `cache is thread-safe with concurrent access`() = runBlocking {
         val iterations = 100
         val jobs = (1..iterations).map { i ->
-            kotlinx.coroutines.async {
+            async {
                 val metrics = createTestMetrics(timestamp = i.toLong())
                 cache.put(metrics)
                 cache.getIfValid()
             }
         }
         
-        jobs.forEach { it.await() }
+        jobs.awaitAll()
         
         // Should not throw any exceptions
         val final = cache.getIfValid()

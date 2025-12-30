@@ -140,7 +140,7 @@ class FpsMetricsCollectorTest {
     }
 
     @Test
-    fun `FpsMetrics isSmooth returns true for fps >= 55`() {
+    fun `FpsMetrics isSmooth returns true for fps at least 55`() {
         val metrics = FpsMetrics(
             currentFps = 55,
             averageFps = 55f,
@@ -168,7 +168,7 @@ class FpsMetricsCollectorTest {
     }
 
     @Test
-    fun `FpsMetrics isCritical returns true for fps < 30`() {
+    fun `FpsMetrics isCritical returns true for fps below 30`() {
         val metrics = FpsMetrics(
             currentFps = 15,
             averageFps = 15f,
@@ -220,7 +220,7 @@ class FpsMetricsCollectorTest {
     // ==================== FpsPeakEvent Tests ====================
 
     @Test
-    fun `FrameDrop severity is HIGH for delta >= 30`() {
+    fun `FrameDrop severity is HIGH for delta at least 30`() {
         val event = FpsPeakEvent.FrameDrop(
             fps = 20,
             delta = 35,
@@ -240,7 +240,7 @@ class FpsMetricsCollectorTest {
     }
 
     @Test
-    fun `FrameDrop severity is LOW for delta < 20`() {
+    fun `FrameDrop severity is LOW for delta below 20`() {
         val event = FpsPeakEvent.FrameDrop(
             fps = 45,
             delta = 15,

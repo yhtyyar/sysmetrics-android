@@ -91,7 +91,7 @@ class FpsCalculationTest {
         
         val fps = frameDurationToFps(durationMs)
         
-        assertEquals(60, fps, 1) // Allow 1 fps margin
+        assertEquals(60.0, fps.toDouble(), 1.0) // Allow 1 fps margin
     }
 
     @Test

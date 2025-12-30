@@ -3,6 +3,8 @@ package com.sysmetrics.data.repository
 import com.sysmetrics.data.aggregation.SimpleAggregationStrategy
 import com.sysmetrics.domain.model.*
 import com.sysmetrics.infrastructure.logger.TestLogger
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Before
@@ -309,10 +311,10 @@ class MetricsRepositoryAggregationTest {
 
         // Run multiple aggregations concurrently
         val results = (0 until 10).map {
-            kotlinx.coroutines.async {
+            async {
                 strategy.aggregate(metrics, TimeWindow.FIVE_MINUTES, now)
             }
-        }.map { it.await() }
+        }.awaitAll()
 
         // All results should be identical
         val firstResult = results.first()

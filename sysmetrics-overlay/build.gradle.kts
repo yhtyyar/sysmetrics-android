@@ -33,14 +33,20 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-Xexplicit-api=strict"
-        )
     }
 
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+        }
+    }
+}
+
+// Apply explicit API mode only to main source sets, not test
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    if (!name.contains("Test")) {
+        compilerOptions {
+            freeCompilerArgs.add("-Xexplicit-api=strict")
         }
     }
 }
