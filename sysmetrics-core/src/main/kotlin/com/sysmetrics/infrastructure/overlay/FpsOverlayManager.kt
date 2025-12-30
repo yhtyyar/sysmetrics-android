@@ -221,7 +221,7 @@ public class FpsOverlayManager private constructor(
         overlayView?.visibility = android.view.View.GONE
     }
 
-    override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+    public override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
         when (event) {
             Lifecycle.Event.ON_START -> {
                 if (isAttached.get() && !fpsCollector.isActive) {

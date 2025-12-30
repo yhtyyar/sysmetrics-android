@@ -347,7 +347,7 @@ class LoggerTest {
     // ==================== Integration Tests ====================
 
     @Test
-    fun `TestLogger can be used to verify logging behavior`() {
+    internal fun `TestLogger can be used to verify logging behavior`() {
         val logger = TestLogger()
         
         // Simulate component that uses logging

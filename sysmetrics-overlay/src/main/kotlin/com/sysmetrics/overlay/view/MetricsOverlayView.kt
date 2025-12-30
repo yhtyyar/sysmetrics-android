@@ -336,9 +336,9 @@ internal class MetricsOverlayView(
         // Memory Section
         addSectionHeader("Memory")
         addMetricRow("Usage", "${metrics.memoryMetrics.usagePercent.toInt()}%")
-        addMetricRow("Used", "${metrics.memoryMetrics.usedMB} MB")
-        addMetricRow("Available", "${metrics.memoryMetrics.availableMB} MB")
-        addMetricRow("Total", "${metrics.memoryMetrics.totalMB} MB")
+        addMetricRow("Used", "${metrics.memoryMetrics.usedMemoryMB} MB")
+        addMetricRow("Available", "${metrics.memoryMetrics.availableMemoryMB} MB")
+        addMetricRow("Total", "${metrics.memoryMetrics.totalMemoryMB} MB")
 
         // Battery Section
         addSectionHeader("Battery")
@@ -349,16 +349,14 @@ internal class MetricsOverlayView(
 
         // Thermal Section
         addSectionHeader("Thermal")
-        metrics.thermalMetrics.cpuTemperature?.let {
-            addMetricRow("CPU Temp", "${it}°C")
-        }
-        addMetricRow("Throttling", if (metrics.thermalMetrics.isThrottling) "Yes" else "No")
+        addMetricRow("CPU Temp", "${metrics.thermalMetrics.cpuTemperature}°C")
+        addMetricRow("Throttling", if (metrics.thermalMetrics.thermalThrottling) "Yes" else "No")
 
         // Storage Section
         addSectionHeader("Storage")
-        addMetricRow("Used", "${metrics.storageMetrics.usedGB} GB")
-        addMetricRow("Available", "${metrics.storageMetrics.availableGB} GB")
-        addMetricRow("Total", "${metrics.storageMetrics.totalGB} GB")
+        addMetricRow("Used", "${metrics.storageMetrics.usedStorageMB / 1024} GB")
+        addMetricRow("Available", "${metrics.storageMetrics.freeStorageMB / 1024} GB")
+        addMetricRow("Total", "${metrics.storageMetrics.totalStorageMB / 1024} GB")
 
         // Network Section
         addSectionHeader("Network")

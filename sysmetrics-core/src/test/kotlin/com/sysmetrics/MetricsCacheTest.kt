@@ -176,6 +176,14 @@ class MetricsCacheTest {
                 usedStorageMB = 32000,
                 usagePercent = 50f
             ),
+            networkMetrics = NetworkMetrics(
+                rxBytes = 0L,
+                txBytes = 0L,
+                rxBytesPerSecond = 0L,
+                txBytesPerSecond = 0L,
+                isConnected = true,
+                connectionType = NetworkType.WIFI
+            ),
             timestamp = timestamp,
             uptime = 3600000L
         )

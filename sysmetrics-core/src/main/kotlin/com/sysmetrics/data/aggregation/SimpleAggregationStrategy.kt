@@ -31,56 +31,7 @@ internal class SimpleAggregationStrategy : MetricsAggregationStrategy {
         val windowStart = calculatePreviousWindowStart(nowMillis, timeWindow)
         val windowEnd = windowStart + timeWindow.durationMillis()
 
-        // Filter metrics within the time window
-        val filtered = metrics.filter { metric ->
-            metric.timestamp in windowStart until windowEnd
-        }
-
-        // Return empty aggregation if no data
-        if (filtered.isEmpty()) {
-            return AggregatedMetrics.empty(
-                timeWindow = timeWindow,
-                windowStartTime = windowStart,
-                windowEndTime = windowEnd
-            )
-        }
-
-        // Calculate statistics
-        val cpuValues = filtered.map { it.cpuMetrics.usagePercent }
-        val memoryValues = filtered.map { it.memoryMetrics.usagePercent }
-        val batteryValues = filtered.map { it.batteryMetrics.level.toFloat() }
-        val healthScores = filtered.map { it.getHealthScore() }
-
-        // Network totals: difference between first and last sample
-        val sortedByTime = filtered.sortedBy { it.timestamp }
-        val firstNetwork = sortedByTime.firstOrNull()?.networkMetrics
-        val lastNetwork = sortedByTime.lastOrNull()?.networkMetrics
-        
-        val networkRxTotal = if (firstNetwork != null && lastNetwork != null) {
-            (lastNetwork.rxBytes - firstNetwork.rxBytes).coerceAtLeast(0L)
-        } else 0L
-        
-        val networkTxTotal = if (firstNetwork != null && lastNetwork != null) {
-            (lastNetwork.txBytes - firstNetwork.txBytes).coerceAtLeast(0L)
-        } else 0L
-
-        return AggregatedMetrics(
-            timeWindow = timeWindow,
-            windowStartTime = windowStart,
-            windowEndTime = windowEnd,
-            sampleCount = filtered.size,
-            cpuPercentAverage = cpuValues.average().toFloat().coerceIn(0f, 100f),
-            memoryPercentAverage = memoryValues.average().toFloat().coerceIn(0f, 100f),
-            batteryPercentAverage = batteryValues.average().toFloat().coerceIn(0f, 100f),
-            temperatureCelsius = sortedByTime.lastOrNull()?.thermalMetrics?.cpuTemperature ?: 0f,
-            healthScoreAverage = healthScores.average().toInt().coerceIn(0, 100),
-            cpuPercentMin = cpuValues.minOrNull()?.coerceIn(0f, 100f) ?: 0f,
-            cpuPercentMax = cpuValues.maxOrNull()?.coerceIn(0f, 100f) ?: 0f,
-            memoryPercentMin = memoryValues.minOrNull()?.coerceIn(0f, 100f) ?: 0f,
-            memoryPercentMax = memoryValues.maxOrNull()?.coerceIn(0f, 100f) ?: 0f,
-            networkRxBytesTotal = networkRxTotal,
-            networkTxBytesTotal = networkTxTotal
-        )
+        return computeAggregation(metrics, timeWindow, windowStart, windowEnd)
     }
 
     /**
@@ -99,11 +50,27 @@ internal class SimpleAggregationStrategy : MetricsAggregationStrategy {
         timeWindow: TimeWindow,
         windowStart: Long,
         windowEnd: Long
+    ): AggregatedMetrics = computeAggregation(metrics, timeWindow, windowStart, windowEnd)
+
+    /**
+     * Core aggregation logic extracted to eliminate code duplication.
+     *
+     * Filters metrics by time window and computes statistical aggregations.
+     *
+     * @param metrics List of raw metrics to aggregate
+     * @param timeWindow The time window type for the aggregation
+     * @param windowStart Start timestamp of the window (inclusive)
+     * @param windowEnd End timestamp of the window (exclusive)
+     * @return Aggregated metrics containing averages, min/max, and network totals
+     */
+    private fun computeAggregation(
+        metrics: List<SystemMetrics>,
+        timeWindow: TimeWindow,
+        windowStart: Long,
+        windowEnd: Long
     ): AggregatedMetrics {
         // Filter metrics within the time window
-        val filtered = metrics.filter { metric ->
-            metric.timestamp in windowStart until windowEnd
-        }
+        val filtered = filterByTimeWindow(metrics, windowStart, windowEnd)
 
         // Return empty aggregation if no data
         if (filtered.isEmpty()) {
@@ -114,41 +81,93 @@ internal class SimpleAggregationStrategy : MetricsAggregationStrategy {
             )
         }
 
-        // Calculate statistics
+        // Extract values for statistical calculations
         val cpuValues = filtered.map { it.cpuMetrics.usagePercent }
         val memoryValues = filtered.map { it.memoryMetrics.usagePercent }
         val batteryValues = filtered.map { it.batteryMetrics.level.toFloat() }
         val healthScores = filtered.map { it.getHealthScore() }
 
-        // Network totals
+        // Sort by timestamp for network delta and last temperature
         val sortedByTime = filtered.sortedBy { it.timestamp }
-        val firstNetwork = sortedByTime.firstOrNull()?.networkMetrics
-        val lastNetwork = sortedByTime.lastOrNull()?.networkMetrics
-        
-        val networkRxTotal = if (firstNetwork != null && lastNetwork != null) {
-            (lastNetwork.rxBytes - firstNetwork.rxBytes).coerceAtLeast(0L)
-        } else 0L
-        
-        val networkTxTotal = if (firstNetwork != null && lastNetwork != null) {
-            (lastNetwork.txBytes - firstNetwork.txBytes).coerceAtLeast(0L)
-        } else 0L
+
+        // Calculate network totals
+        val (networkRxTotal, networkTxTotal) = calculateNetworkTotals(sortedByTime)
 
         return AggregatedMetrics(
             timeWindow = timeWindow,
             windowStartTime = windowStart,
             windowEndTime = windowEnd,
             sampleCount = filtered.size,
-            cpuPercentAverage = cpuValues.average().toFloat().coerceIn(0f, 100f),
-            memoryPercentAverage = memoryValues.average().toFloat().coerceIn(0f, 100f),
-            batteryPercentAverage = batteryValues.average().toFloat().coerceIn(0f, 100f),
+            cpuPercentAverage = cpuValues.safeAverage().coerceIn(0f, 100f),
+            memoryPercentAverage = memoryValues.safeAverage().coerceIn(0f, 100f),
+            batteryPercentAverage = batteryValues.safeAverage().coerceIn(0f, 100f),
             temperatureCelsius = sortedByTime.lastOrNull()?.thermalMetrics?.cpuTemperature ?: 0f,
-            healthScoreAverage = healthScores.average().toInt().coerceIn(0, 100),
-            cpuPercentMin = cpuValues.minOrNull()?.coerceIn(0f, 100f) ?: 0f,
-            cpuPercentMax = cpuValues.maxOrNull()?.coerceIn(0f, 100f) ?: 0f,
-            memoryPercentMin = memoryValues.minOrNull()?.coerceIn(0f, 100f) ?: 0f,
-            memoryPercentMax = memoryValues.maxOrNull()?.coerceIn(0f, 100f) ?: 0f,
+            healthScoreAverage = healthScores.safeAverageInt().coerceIn(0, 100),
+            cpuPercentMin = cpuValues.safeMin().coerceIn(0f, 100f),
+            cpuPercentMax = cpuValues.safeMax().coerceIn(0f, 100f),
+            memoryPercentMin = memoryValues.safeMin().coerceIn(0f, 100f),
+            memoryPercentMax = memoryValues.safeMax().coerceIn(0f, 100f),
             networkRxBytesTotal = networkRxTotal,
             networkTxBytesTotal = networkTxTotal
         )
     }
+
+    /**
+     * Filters metrics to include only those within the specified time window.
+     *
+     * @param metrics List of metrics to filter
+     * @param windowStart Start timestamp (inclusive)
+     * @param windowEnd End timestamp (exclusive)
+     * @return Filtered list of metrics within the time window
+     */
+    private fun filterByTimeWindow(
+        metrics: List<SystemMetrics>,
+        windowStart: Long,
+        windowEnd: Long
+    ): List<SystemMetrics> = metrics.filter { it.timestamp in windowStart until windowEnd }
+
+    /**
+     * Calculates network byte totals as the difference between first and last samples.
+     *
+     * Handles counter resets by returning 0 when the delta would be negative.
+     *
+     * @param sortedMetrics Metrics sorted by timestamp
+     * @return Pair of (rxBytesTotal, txBytesTotal)
+     */
+    private fun calculateNetworkTotals(sortedMetrics: List<SystemMetrics>): Pair<Long, Long> {
+        val firstNetwork = sortedMetrics.firstOrNull()?.networkMetrics
+        val lastNetwork = sortedMetrics.lastOrNull()?.networkMetrics
+
+        val rxTotal = if (firstNetwork != null && lastNetwork != null) {
+            (lastNetwork.rxBytes - firstNetwork.rxBytes).coerceAtLeast(0L)
+        } else 0L
+
+        val txTotal = if (firstNetwork != null && lastNetwork != null) {
+            (lastNetwork.txBytes - firstNetwork.txBytes).coerceAtLeast(0L)
+        } else 0L
+
+        return rxTotal to txTotal
+    }
+
+    /**
+     * Extension function for safe average calculation that handles empty lists.
+     */
+    private fun List<Float>.safeAverage(): Float =
+        if (isEmpty()) 0f else average().toFloat()
+
+    /**
+     * Extension function for safe average calculation returning Int.
+     */
+    private fun List<Float>.safeAverageInt(): Int =
+        if (isEmpty()) 0 else average().toInt()
+
+    /**
+     * Extension function for safe minimum calculation.
+     */
+    private fun List<Float>.safeMin(): Float = minOrNull() ?: 0f
+
+    /**
+     * Extension function for safe maximum calculation.
+     */
+    private fun List<Float>.safeMax(): Float = maxOrNull() ?: 0f
 }

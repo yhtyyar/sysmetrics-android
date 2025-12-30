@@ -38,7 +38,7 @@ import java.util.ArrayDeque
  * @property androidProvider Provider for Android-specific metrics
  * @property cache TTL-based metrics cache
  */
-public class MetricsRepositoryImpl(
+internal class MetricsRepositoryImpl(
     private val procFileReader: ProcFileReader,
     private val androidProvider: AndroidMetricsProvider,
     private val networkProvider: NetworkMetricsProvider,

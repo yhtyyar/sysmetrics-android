@@ -211,6 +211,14 @@ class SystemMetricsTest {
                 usedStorageMB = (64000 * storageUsage / 100).toLong(),
                 usagePercent = storageUsage
             ),
+            networkMetrics = NetworkMetrics(
+                rxBytes = 0L,
+                txBytes = 0L,
+                rxBytesPerSecond = 0L,
+                txBytesPerSecond = 0L,
+                isConnected = true,
+                connectionType = NetworkType.WIFI
+            ),
             timestamp = System.currentTimeMillis(),
             uptime = 3600000L
         )

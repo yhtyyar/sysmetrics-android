@@ -1,6 +1,8 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    id("io.gitlab.arturbosch.detekt")
+    // id("org.jlleitschuh.gradle.ktlint") // Temporarily disabled - ktlint crashes on some files
 }
 
 android {
@@ -69,4 +71,27 @@ dependencies {
     // Android Testing
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test:rules:1.5.0")
 }
+
+// Detekt configuration
+detekt {
+    buildUponDefaultConfig = true
+    allRules = false
+    config.setFrom(files("${rootProject.projectDir}/detekt.yml"))
+    parallel = true
+    ignoreFailures = true
+}
+
+// Ktlint configuration - disabled due to parsing issues
+// ktlint {
+//     version.set("1.1.1")
+//     android.set(true)
+//     verbose.set(true)
+//     outputToConsole.set(true)
+//     ignoreFailures.set(true)
+//     filter {
+//         exclude("**/generated/**")
+//     }
+// }

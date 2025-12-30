@@ -328,16 +328,17 @@ public object SysMetrics {
                 return Result.success(Unit)
             }
 
+            // Get repository reference outside synchronized block for suspend call
+            val repository = repositoryRef.get()
+            val result = repository?.destroy() ?: Result.success(Unit)
+            
             synchronized(this) {
-                val repository = repositoryRef.get()
-                val result = repository?.destroy() ?: Result.success(Unit)
-                
                 repositoryRef.set(null)
                 contextRef.set(null)
                 initialized.set(false)
-                
-                result
             }
+            
+            result
         } catch (e: Exception) {
             Result.failure(e)
         }
